@@ -1,0 +1,67 @@
+import React from 'react';
+import { fmtPrice } from '../utils/format';
+
+const Cart = ({ cart, removeFromCart, updateQuantity, cartTotal }) => {
+  if (cart.length === 0) {
+    return (
+      <div className="w-80 bg-white border-l border-gray-200 flex flex-col">
+        <div className="p-6 flex-1 flex flex-col items-center justify-center text-gray-400">
+          <div className="text-6xl mb-4">🛒</div>
+          <p className="text-lg font-medium">Корзина пуста</p>
+          <p className="text-sm mt-1 text-gray-400">Добавьте товары</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-80 bg-white border-l border-gray-200 flex flex-col">
+      <div className="p-5 border-b border-gray-200">
+        <h2 className="font-bold text-xl">Корзина ({cart.length})</h2>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4">
+        {cart.map(item => (
+          <div key={item.id} className="flex items-center justify-between mb-3 pb-3 border-b border-gray-100 gap-2">
+            <div className="flex-1 min-w-0">
+              <h3 className="font-bold text-gray-900 text-sm truncate">{item.name}</h3>
+              <p className="text-blue-600 font-bold text-sm mt-0.5">{fmtPrice(item.price * item.quantity)}</p>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => updateQuantity(item.id, -1)}
+                className="w-11 h-11 flex items-center justify-center bg-gray-100 rounded-xl hover:bg-gray-200 text-lg font-bold active:scale-95"
+              >
+                −
+              </button>
+              <span className="w-8 text-center font-semibold text-base">{item.quantity}</span>
+              <button
+                onClick={() => updateQuantity(item.id, 1)}
+                className="w-11 h-11 flex items-center justify-center bg-blue-100 rounded-xl hover:bg-blue-200 text-lg font-bold text-blue-600 active:scale-95"
+              >
+                +
+              </button>
+            </div>
+
+            <button
+              onClick={() => removeFromCart(item.id)}
+              className="w-11 h-11 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl active:scale-95"
+            >
+              <span className="text-xl">✕</span>
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <div className="p-5 border-t border-gray-200 bg-gray-50">
+        <div className="flex justify-between items-center">
+          <span className="text-gray-600 font-medium text-base">Итого:</span>
+          <span className="text-2xl font-bold text-gray-800">{fmtPrice(cartTotal)}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Cart;
