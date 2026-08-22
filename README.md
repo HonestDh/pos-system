@@ -17,9 +17,9 @@ Point of Sale (POS) system built with React, Webpack, and Tailwind CSS.
 ## 🔧 Installation
 
 npm install
-#or
+# or
 yarn install
 ## 🏃‍♂️ Development mode
 npm start
-#or
+# or
 yarn start
