@@ -37,7 +37,7 @@ const AmountPad = ({ title, initialValue, dueAmount, onConfirm, onCancel }) => {
   };
 
   const handleDecimal = () => {
-    setDraft(prev => z{
+    setDraft(prev => {
       if (prev.includes(',')) return prev;
       return prev === '' ? '0,' : prev + ',';
     });
