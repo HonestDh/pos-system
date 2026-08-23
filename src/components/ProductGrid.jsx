@@ -1,5 +1,6 @@
 import React from 'react';
 import { fmtPrice } from '../utils/format';
+import { minPrice, hasVolumeChoice } from '../utils/product';
 
 const ProductGrid = ({ products, categories, addToCart, onCategoryClick }) => {
   if (products.length === 0 && categories.length === 0) {
@@ -44,7 +45,10 @@ const ProductGrid = ({ products, categories, addToCart, onCategoryClick }) => {
                 {product.name}
               </h3>
               <p className="text-blue-600 font-bold text-lg leading-tight mt-0.5">
-                {fmtPrice(product.price)}
+                {hasVolumeChoice(product) && (
+                  <span className="text-xs text-gray-400 font-normal mr-1">от</span>
+                )}
+                {fmtPrice(minPrice(product))}
               </p>
             </div>
           </button>

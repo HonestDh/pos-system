@@ -22,22 +22,29 @@ const Cart = ({ cart, removeFromCart, updateQuantity, cartTotal }) => {
 
       <div className="flex-1 overflow-y-auto p-4">
         {cart.map(item => (
-          <div key={item.id} className="flex items-center justify-between mb-3 pb-3 border-b border-gray-100 gap-2">
+          <div key={item.lineId} className="flex items-center justify-between mb-3 pb-3 border-b border-gray-100 gap-2">
             <div className="flex-1 min-w-0">
-              <h3 className="font-bold text-gray-900 text-sm truncate">{item.name}</h3>
+              <h3 className="font-bold text-gray-900 text-sm truncate">
+                {item.name}
+                {item.volumeLabel && (
+                  <span className="ml-1.5 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs align-middle">
+                    {item.volumeLabel}
+                  </span>
+                )}
+              </h3>
               <p className="text-blue-600 font-bold text-sm mt-0.5">{fmtPrice(item.price * item.quantity)}</p>
             </div>
 
             <div className="flex items-center gap-1.5">
               <button
-                onClick={() => updateQuantity(item.id, -1)}
+                onClick={() => updateQuantity(item.lineId, -1)}
                 className="w-11 h-11 flex items-center justify-center bg-gray-100 rounded-xl hover:bg-gray-200 text-lg font-bold active:scale-95"
               >
                 −
               </button>
               <span className="w-8 text-center font-semibold text-base">{item.quantity}</span>
               <button
-                onClick={() => updateQuantity(item.id, 1)}
+                onClick={() => updateQuantity(item.lineId, 1)}
                 className="w-11 h-11 flex items-center justify-center bg-blue-100 rounded-xl hover:bg-blue-200 text-lg font-bold text-blue-600 active:scale-95"
               >
                 +
@@ -45,7 +52,7 @@ const Cart = ({ cart, removeFromCart, updateQuantity, cartTotal }) => {
             </div>
 
             <button
-              onClick={() => removeFromCart(item.id)}
+              onClick={() => removeFromCart(item.lineId)}
               className="w-11 h-11 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl active:scale-95"
             >
               <span className="text-xl">✕</span>

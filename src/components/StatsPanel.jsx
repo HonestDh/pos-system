@@ -60,7 +60,10 @@ const StatsPanel = ({ stats }) => {
       <div className="text-sm text-gray-600">
         {sale.items.map((item, i) => (
           <div key={i} className="flex justify-between py-1">
-            <span>{item.name} × {item.quantity}</span>
+            <span>
+              {item.name}
+              {parseInt(item.ml, 10) ? ` ${parseInt(item.ml, 10)} мл` : ''} × {item.quantity}
+            </span>
             <span>{formatCurrency(item.price * item.quantity)}</span>
           </div>
         ))}

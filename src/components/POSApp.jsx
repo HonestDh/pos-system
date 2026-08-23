@@ -9,7 +9,9 @@ import PrinterSettings from './PrinterSettings';
 import BackupPanel from './BackupPanel';
 import ExportPanel from './ExportPanel';
 import PinDialog from './PinDialog';
+import VolumeDialog from './VolumeDialog';
 import { roundPrice } from '../utils/format';
+import { getVolumes, hasVolumeChoice, lineId, volumeLabel } from '../utils/product';
 
 // =============================================
 // Утилиты для работы с деревом категорий
@@ -84,37 +86,46 @@ const POSApp = () => {
   const [showBackup, setShowBackup] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [pinDialogMode, setPinDialogMode] = useState(null); // null | 'setup' | 'enter'
+  const [volumeChoice, setVolumeChoice] = useState(null);   // товар, для которого выбирают объём
   const [categories, setCategories] = useState([]); // [{name, children:[...]}]
   const [isConfigLoaded, setIsConfigLoaded] = useState(false);
   const [stats, setStats] = useState(null);
   const [printerConfig, setPrinterConfig] = useState({ enabled: false, printerName: '' });
   const [printError, setPrintError] = useState(null);
+  const [orderNumber, setOrderNumber] = useState(null);
+  const [saveError, setSaveError] = useState(null);
 
   // ----- Загрузка из Electron -----
   useEffect(() => {
-    if (window.electron) {
-      window.electron.ipcRenderer.on('config-loaded', (event, data) => {
-        if (data.config.products && data.config.products.length > 0) {
-          setProducts(data.config.products);
-        }
-        if (data.config.categories && data.config.categories.length > 0) {
-          setCategories(data.config.categories);
-        }
-        if (data.stats) setStats(data.stats);
-        if (data.printerConfig) setPrinterConfig(data.printerConfig);
-        setIsConfigLoaded(true);
-      });
-      window.electron.ipcRenderer.on('stats-updated', (event, data) => setStats(data));
-      window.electron.ipcRenderer.on('printer-config-loaded', (event, config) => setPrinterConfig(config));
-      // Ошибка печати не должна проходить незаметно — показываем кассиру
-      window.electron.ipcRenderer.on('print-result', (event, result) => {
-        if (result && !result.ok) {
-          setPrintError(result.error || 'Чек не напечатан');
-        }
-      });
-      window.electron.ipcRenderer.send('get-stats');
-      window.electron.ipcRenderer.send('get-printer-config');
-    }
+    if (!window.electron) return;
+    const ipc = window.electron.ipcRenderer;
+
+    ipc.on('stats-updated', (event, data) => setStats(data));
+    ipc.on('printer-config-loaded', (event, config) => setPrinterConfig(config));
+    // Ошибка печати не должна проходить незаметно — показываем кассиру
+    ipc.on('print-result', (event, result) => {
+      if (result && !result.ok) {
+        setPrintError(result.error || 'Чек не напечатан');
+      }
+    });
+    // Номер заказа — кассиру называть клиенту
+    ipc.on('order-number', (event, num) => setOrderNumber(num));
+    // Продажа не легла на диск — это важнее ошибки печати
+    ipc.on('save-error', (event, message) => setSaveError(message));
+
+    // Запрашиваем сами, а не ждём рассылки от main: слушатель здесь
+    // появляется только после монтирования, и рассылка могла его опередить
+    ipc.invoke('get-initial-data').then(data => {
+      const cfg = (data && data.config) || {};
+      if (Array.isArray(cfg.products) && cfg.products.length > 0) setProducts(cfg.products);
+      if (Array.isArray(cfg.categories) && cfg.categories.length > 0) setCategories(cfg.categories);
+      if (data && data.stats) setStats(data.stats);
+      if (data && data.printerConfig) setPrinterConfig(data.printerConfig);
+      setIsConfigLoaded(true);
+    }).catch(error => {
+      console.error('Не удалось загрузить настройки:', error);
+      // Флаг не поднимаем: иначе пустое состояние затрёт файл на диске
+    });
   }, []);
 
   // ----- Сохранение в Electron -----
@@ -223,25 +234,49 @@ const POSApp = () => {
   const filteredProducts = currentProducts;
 
   // ----- Корзина -----
-  const addToCart = (product) => {
+  // Строки различаются парой товар+объём: один товар в разных объёмах —
+  // это разные строки, поэтому ключ строки не id, а lineId
+  const addToCart = (product, volume) => {
+    const vol = volume || getVolumes(product)[0];
+    const key = lineId(product.id, vol.ml);
+
     setCart(prev => {
-      const existing = prev.find(item => item.id === product.id);
+      const existing = prev.find(item => item.lineId === key);
       if (existing) {
         return prev.map(item =>
-          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+          item.lineId === key ? { ...item, quantity: item.quantity + 1 } : item
         );
       }
-      return [...prev, { ...product, quantity: 1 }];
+      return [...prev, {
+        lineId: key,
+        id: product.id,
+        name: product.name,
+        image: product.image,
+        categories: product.categories,
+        ml: vol.ml,
+        volumeLabel: volumeLabel(vol.ml),
+        price: vol.price,
+        quantity: 1
+      }];
     });
   };
 
-  const removeFromCart = (productId) => {
-    setCart(prev => prev.filter(item => item.id !== productId));
+  // Нажатие на товар: если объёмов несколько — сначала спросить какой
+  const handleProductClick = (product) => {
+    if (hasVolumeChoice(product)) {
+      setVolumeChoice(product);
+    } else {
+      addToCart(product);
+    }
   };
 
-  const updateQuantity = (productId, delta) => {
+  const removeFromCart = (key) => {
+    setCart(prev => prev.filter(item => item.lineId !== key));
+  };
+
+  const updateQuantity = (key, delta) => {
     setCart(prev => prev.map(item => {
-      if (item.id === productId) {
+      if (item.lineId === key) {
         return { ...item, quantity: Math.max(1, item.quantity + delta) };
       }
       return item;
@@ -264,6 +299,7 @@ const POSApp = () => {
           id: item.id,
           name: item.name,
           categories: item.categories,
+          ml: item.ml,
           price: item.price,
           quantity: item.quantity
         }))
@@ -274,6 +310,7 @@ const POSApp = () => {
       setCart([]);
       setAmountReceived('');
       setIsPaymentComplete(false);
+      setOrderNumber(null);
     }, 3000);
   };
 
@@ -390,7 +427,7 @@ const POSApp = () => {
           <ProductGrid
             products={filteredProducts}
             categories={currentFolders}
-            addToCart={addToCart}
+            addToCart={handleProductClick}
             onCategoryClick={handleCategoryClick}
           />
         </div>
@@ -453,6 +490,42 @@ const POSApp = () => {
           onSuccess={handlePinSuccess}
           onCancel={() => setPinDialogMode(null)}
         />
+      )}
+
+      {volumeChoice && (
+        <VolumeDialog
+          product={volumeChoice}
+          onPick={(vol) => { addToCart(volumeChoice, vol); setVolumeChoice(null); }}
+          onCancel={() => setVolumeChoice(null)}
+        />
+      )}
+
+      {/* Номер заказа после оплаты — кассир называет его клиенту */}
+      {orderNumber && (
+        <div className="fixed inset-0 flex items-center justify-center z-40 pointer-events-none">
+          <div className="bg-green-600 text-white rounded-3xl shadow-2xl px-12 py-8 text-center">
+            <div className="text-lg font-bold opacity-90">Заказ принят</div>
+            <div className="text-8xl font-bold leading-none my-2">№{orderNumber}</div>
+          </div>
+        </div>
+      )}
+
+      {saveError && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-lg w-full px-4">
+          <div className="bg-red-700 text-white rounded-xl shadow-xl p-4 flex items-center gap-3">
+            <span className="text-2xl">⚠️</span>
+            <div className="flex-1 min-w-0">
+              <div className="font-bold">Продажа не сохранена</div>
+              <div className="text-sm opacity-90 break-words">{saveError}</div>
+            </div>
+            <button
+              onClick={() => setSaveError(null)}
+              className="shrink-0 w-11 h-11 flex items-center justify-center rounded-lg bg-red-800 hover:bg-red-900 font-bold"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
       )}
 
       {printError && (

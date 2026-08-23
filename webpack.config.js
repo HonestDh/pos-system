@@ -47,6 +47,9 @@ module.exports = {
       ]
     })
   ],
+  // Порог 244 КБ рассчитан на загрузку по сети. Здесь bundle.js читается
+  // с локального диска, поэтому предупреждения о размере не по делу.
+  performance: { hints: false },
   devServer: {
     static: {
       directory: path.join(__dirname, 'public'),

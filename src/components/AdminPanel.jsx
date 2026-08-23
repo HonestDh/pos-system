@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
 import { fmtPrice } from '../utils/format';
+import { VOLUME_OPTIONS, getVolumes, volumeLabel } from '../utils/product';
 
 const AdminPanel = ({ products, categories, onAddProduct, onDeleteProduct, onAddCategory, onDeleteCategory, allFolders }) => {
   const [activeTab, setActiveTab] = useState('products');
-  const [newProduct, setNewProduct] = useState({ name: '', price: '', image: '📦', selectedFolder: 'root' });
+  const [newProduct, setNewProduct] = useState({ name: '', image: '📦', selectedFolder: 'root' });
+  // Цены по объёмам: { 100: '3.5', 250: '', ... } — пустая строка значит «объём не используется»
+  const [prices, setPrices] = useState({});
   const [newCategory, setNewCategory] = useState('');
   const [newCategoryFolder, setNewCategoryFolder] = useState('root');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [formError, setFormError] = useState('');
 
   const emojis = ['📦', '☕', '🍵', '🍊', '💧', '🍔', '🍕', '🥗', '🍝', '🍩', '🍰', '🍦', '🍟', '🍗', '🍎', '🍌', '🍇', '🍓', '🍒', '🍍'];
 
@@ -16,17 +20,48 @@ const AdminPanel = ({ products, categories, onAddProduct, onDeleteProduct, onAdd
     return JSON.parse(newProduct.selectedFolder);
   };
 
+  // Объёмы с заполненной ценой больше нуля
+  const filledVolumes = () => VOLUME_OPTIONS
+    .filter(ml => {
+      const p = parseFloat(String(prices[ml] ?? '').replace(',', '.'));
+      return !isNaN(p) && p > 0;
+    })
+    .map(ml => ({ ml, price: parseFloat(String(prices[ml]).replace(',', '.')) }));
+
+  const setPrice = (ml, value) => {
+    setPrices(prev => ({ ...prev, [ml]: value }));
+    setFormError('');
+  };
+
+  const resetForm = () => {
+    setNewProduct({ name: '', image: '📦', selectedFolder: 'root' });
+    setPrices({});
+    setShowEmojiPicker(false);
+    setFormError('');
+  };
+
   const handleAddProduct = () => {
-    if (newProduct.name && newProduct.price) {
-      onAddProduct({
-        name: newProduct.name,
-        categories: getProductCategories(),
-        price: parseFloat(newProduct.price),
-        image: newProduct.image
-      });
-      setNewProduct({ name: '', price: '', image: '📦', selectedFolder: 'root' });
-      setShowEmojiPicker(false);
+    const volumes = filledVolumes();
+
+    if (!newProduct.name.trim()) {
+      setFormError('Укажите название товара');
+      return;
     }
+    if (volumes.length === 0) {
+      setFormError('Укажите цену хотя бы для одного объёма');
+      return;
+    }
+
+    onAddProduct({
+      name: newProduct.name.trim(),
+      categories: getProductCategories(),
+      image: newProduct.image,
+      volumes,
+      // Базовая цена = самый маленький объём: пригодится, если товар
+      // когда-нибудь окажется в коде, не знающем про volumes
+      price: volumes[0].price
+    });
+    resetForm();
   };
 
   const handleAddCategory = () => {
@@ -98,13 +133,55 @@ const AdminPanel = ({ products, categories, onAddProduct, onDeleteProduct, onAdd
                     ))}
                   </select>
                 </div>
-                <input
-                  type="number"
-                  placeholder="Цена (Br)"
-                  value={newProduct.price}
-                  onChange={(e) => setNewProduct({ ...newProduct, price: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-base"
-                />
+                {/* Объёмы стакана: цена задаётся для каждого нужного объёма.
+                    Пустое поле означает, что этот объём у товара не продаётся. */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Цены по объёмам
+                  </label>
+                  <div className="space-y-2">
+                    {VOLUME_OPTIONS.map(ml => {
+                      const active = String(prices[ml] ?? '').trim() !== '';
+                      return (
+                        <div
+                          key={ml}
+                          className={`flex items-center gap-2 p-2 rounded-xl border-2 transition-colors ${
+                            active ? 'border-blue-400 bg-blue-50' : 'border-gray-200 bg-gray-50'
+                          }`}
+                        >
+                          <span className={`w-20 text-center font-bold shrink-0 ${
+                            active ? 'text-blue-700' : 'text-gray-400'
+                          }`}>
+                            {ml} мл
+                          </span>
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            step="0.1"
+                            min="0"
+                            placeholder="цена"
+                            value={prices[ml] ?? ''}
+                            onChange={(e) => setPrice(ml, e.target.value)}
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-base bg-white"
+                          />
+                          {active && (
+                            <button
+                              onClick={() => setPrice(ml, '')}
+                              className="w-11 h-11 flex items-center justify-center text-gray-400 hover:text-red-600 rounded-lg shrink-0"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1.5">
+                    Заполните только те объёмы, которые продаются. Если задан один —
+                    товар добавляется в корзину сразу, если несколько — кассир выберет объём.
+                  </p>
+                </div>
+
                 <div className="relative">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Иконка</label>
                   <div className="flex gap-2">
@@ -135,6 +212,12 @@ const AdminPanel = ({ products, categories, onAddProduct, onDeleteProduct, onAdd
                     </div>
                   )}
                 </div>
+                {formError && (
+                  <div className="p-3 rounded-xl bg-red-50 text-red-700 border border-red-200 text-sm font-bold">
+                    {formError}
+                  </div>
+                )}
+
                 <button
                   onClick={handleAddProduct}
                   className="w-full bg-green-600 text-white py-3 rounded-xl hover:bg-green-700 font-bold text-base transition-colors active:scale-[0.98] min-h-[48px]"
@@ -156,11 +239,21 @@ const AdminPanel = ({ products, categories, onAddProduct, onDeleteProduct, onAdd
                         <span className="text-3xl flex-shrink-0">{product.image}</span>
                         <div className="min-w-0">
                           <h3 className="font-bold text-gray-900 text-sm truncate">{product.name}</h3>
-                          <p className="text-sm text-gray-500">
+                          <p className="text-sm text-gray-500 truncate">
                             {Array.isArray(product.categories) && product.categories.length > 0
-                              ? `${product.categories.join(' / ')} • ${fmtPrice(product.price)}`
-                              : `Корневая папка • ${fmtPrice(product.price)}`}
+                              ? product.categories.join(' / ')
+                              : 'Корневая папка'}
                           </p>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {getVolumes(product).map(v => (
+                              <span
+                                key={v.ml ?? 'base'}
+                                className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-bold"
+                              >
+                                {v.label ? `${v.label} — ` : ''}{fmtPrice(v.price)}
+                              </span>
+                            ))}
+                          </div>
                         </div>
                       </div>
                       <button
