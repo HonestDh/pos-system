@@ -1,12 +1,21 @@
 import React, { useState } from 'react';
 import { fmtPrice } from '../utils/format';
-import { VOLUME_OPTIONS, getVolumes, volumeLabel } from '../utils/product';
+import { VOLUME_OPTIONS, UNIT_VOLUME, UNIT_WEIGHT, getVariants } from '../utils/product';
+
+const num = (value) => parseFloat(String(value ?? '').replace(',', '.'));
 
 const AdminPanel = ({ products, categories, onAddProduct, onDeleteProduct, onAddCategory, onDeleteCategory, allFolders }) => {
   const [activeTab, setActiveTab] = useState('products');
   const [newProduct, setNewProduct] = useState({ name: '', image: '📦', selectedFolder: 'root' });
+  // Тип товара: напитки продаются по объёму, десерты — по массе
+  const [unit, setUnit] = useState(UNIT_VOLUME);
   // Цены по объёмам: { 100: '3.5', 250: '', ... } — пустая строка значит «объём не используется»
   const [prices, setPrices] = useState({});
+  // Свой объём, которого нет в списке предлагаемых
+  const [customVolume, setCustomVolume] = useState({ size: '', price: '' });
+  // Масса порции: одно поле. Пустая или нулевая масса допустима —
+  // тогда товар продаётся без указания массы (штучно)
+  const [weight, setWeight] = useState({ size: '', price: '' });
   const [newCategory, setNewCategory] = useState('');
   const [newCategoryFolder, setNewCategoryFolder] = useState('root');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -20,13 +29,31 @@ const AdminPanel = ({ products, categories, onAddProduct, onDeleteProduct, onAdd
     return JSON.parse(newProduct.selectedFolder);
   };
 
-  // Объёмы с заполненной ценой больше нуля
-  const filledVolumes = () => VOLUME_OPTIONS
-    .filter(ml => {
-      const p = parseFloat(String(prices[ml] ?? '').replace(',', '.'));
-      return !isNaN(p) && p > 0;
-    })
-    .map(ml => ({ ml, price: parseFloat(String(prices[ml]).replace(',', '.')) }));
+  /**
+   * Варианты товара в том виде, в котором они уходят в конфиг:
+   * у объёмных — { ml, price }, у весовых — { g, price }.
+   * Масса 0 допустима: такой вариант нигде не подписывается.
+   */
+  const buildVariants = () => {
+    if (unit === UNIT_WEIGHT) {
+      const price = num(weight.price);
+      if (!(price > 0)) return [];
+      return [{ g: num(weight.size) > 0 ? num(weight.size) : 0, price }];
+    }
+
+    const list = VOLUME_OPTIONS
+      .filter(ml => num(prices[ml]) > 0)
+      .map(ml => ({ ml, price: num(prices[ml]) }));
+
+    const extraSize = num(customVolume.size);
+    const extraPrice = num(customVolume.price);
+    // Свой объём добавляем, только если заданы и объём, и цена,
+    // и такого объёма ещё нет среди предлагаемых
+    if (extraSize > 0 && extraPrice > 0 && !list.some(v => v.ml === extraSize)) {
+      list.push({ ml: extraSize, price: extraPrice });
+    }
+    return list.sort((a, b) => a.ml - b.ml);
+  };
 
   const setPrice = (ml, value) => {
     setPrices(prev => ({ ...prev, [ml]: value }));
@@ -36,19 +63,23 @@ const AdminPanel = ({ products, categories, onAddProduct, onDeleteProduct, onAdd
   const resetForm = () => {
     setNewProduct({ name: '', image: '📦', selectedFolder: 'root' });
     setPrices({});
+    setCustomVolume({ size: '', price: '' });
+    setWeight({ size: '', price: '' });
     setShowEmojiPicker(false);
     setFormError('');
   };
 
   const handleAddProduct = () => {
-    const volumes = filledVolumes();
+    const volumes = buildVariants();
 
     if (!newProduct.name.trim()) {
       setFormError('Укажите название товара');
       return;
     }
     if (volumes.length === 0) {
-      setFormError('Укажите цену хотя бы для одного объёма');
+      setFormError(unit === UNIT_WEIGHT
+        ? 'Укажите цену товара'
+        : 'Укажите цену хотя бы для одного объёма');
       return;
     }
 
@@ -56,12 +87,18 @@ const AdminPanel = ({ products, categories, onAddProduct, onDeleteProduct, onAdd
       name: newProduct.name.trim(),
       categories: getProductCategories(),
       image: newProduct.image,
+      unit,
       volumes,
-      // Базовая цена = самый маленький объём: пригодится, если товар
+      // Базовая цена = самый маленький вариант: пригодится, если товар
       // когда-нибудь окажется в коде, не знающем про volumes
       price: volumes[0].price
     });
     resetForm();
+  };
+
+  const switchUnit = (next) => {
+    setUnit(next);
+    setFormError('');
   };
 
   const handleAddCategory = () => {
@@ -133,8 +170,37 @@ const AdminPanel = ({ products, categories, onAddProduct, onDeleteProduct, onAdd
                     ))}
                   </select>
                 </div>
+                {/* Тип товара определяет, чем задаётся размер порции:
+                    объёмом стакана (напитки) или массой (десерты) */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Тип товара</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => switchUnit(UNIT_VOLUME)}
+                      className={`py-3 rounded-xl font-bold text-base min-h-[48px] border-2 transition-colors ${
+                        unit === UNIT_VOLUME
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                      }`}
+                    >
+                      🥤 По объёму
+                    </button>
+                    <button
+                      onClick={() => switchUnit(UNIT_WEIGHT)}
+                      className={`py-3 rounded-xl font-bold text-base min-h-[48px] border-2 transition-colors ${
+                        unit === UNIT_WEIGHT
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                      }`}
+                    >
+                      🍰 По массе
+                    </button>
+                  </div>
+                </div>
+
                 {/* Объёмы стакана: цена задаётся для каждого нужного объёма.
                     Пустое поле означает, что этот объём у товара не продаётся. */}
+                {unit === UNIT_VOLUME && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Цены по объёмам
@@ -175,12 +241,84 @@ const AdminPanel = ({ products, categories, onAddProduct, onDeleteProduct, onAdd
                         </div>
                       );
                     })}
+
+                    {/* Свой объём — для нестандартной посуды */}
+                    <div className={`flex items-center gap-2 p-2 rounded-xl border-2 border-dashed transition-colors ${
+                      String(customVolume.price).trim() !== ''
+                        ? 'border-blue-400 bg-blue-50'
+                        : 'border-gray-300 bg-gray-50'
+                    }`}>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min="0"
+                        placeholder="свой, мл"
+                        value={customVolume.size}
+                        onChange={(e) => { setCustomVolume({ ...customVolume, size: e.target.value }); setFormError(''); }}
+                        className="w-20 px-2 py-2 border border-gray-300 rounded-lg text-base bg-white text-center shrink-0"
+                      />
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        step="0.1"
+                        min="0"
+                        placeholder="цена"
+                        value={customVolume.price}
+                        onChange={(e) => { setCustomVolume({ ...customVolume, price: e.target.value }); setFormError(''); }}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-base bg-white"
+                      />
+                      {(String(customVolume.size).trim() !== '' || String(customVolume.price).trim() !== '') && (
+                        <button
+                          onClick={() => setCustomVolume({ size: '', price: '' })}
+                          className="w-11 h-11 flex items-center justify-center text-gray-400 hover:text-red-600 rounded-lg shrink-0"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <p className="text-xs text-gray-400 mt-1.5">
                     Заполните только те объёмы, которые продаются. Если задан один —
                     товар добавляется в корзину сразу, если несколько — кассир выберет объём.
                   </p>
                 </div>
+                )}
+
+                {/* Масса: одно поле. Если масса не указана или равна нулю,
+                    товар нигде не подписывается массой — ни на экране, ни в чеке. */}
+                {unit === UNIT_WEIGHT && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Масса и цена
+                  </label>
+                  <div className="flex items-center gap-2 p-2 rounded-xl border-2 border-gray-200 bg-gray-50">
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="1"
+                      min="0"
+                      placeholder="масса, г"
+                      value={weight.size}
+                      onChange={(e) => { setWeight({ ...weight, size: e.target.value }); setFormError(''); }}
+                      className="w-24 px-2 py-2 border border-gray-300 rounded-lg text-base bg-white text-center shrink-0"
+                    />
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="0.1"
+                      min="0"
+                      placeholder="цена"
+                      value={weight.price}
+                      onChange={(e) => { setWeight({ ...weight, price: e.target.value }); setFormError(''); }}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-base bg-white"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1.5">
+                    Массу можно не указывать — тогда товар продаётся штучно
+                    и масса не выводится ни на экране, ни в чеке.
+                  </p>
+                </div>
+                )}
 
                 <div className="relative">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Иконка</label>
@@ -245,9 +383,9 @@ const AdminPanel = ({ products, categories, onAddProduct, onDeleteProduct, onAdd
                               : 'Корневая папка'}
                           </p>
                           <div className="flex flex-wrap gap-1 mt-1">
-                            {getVolumes(product).map(v => (
+                            {getVariants(product).map(v => (
                               <span
-                                key={v.ml ?? 'base'}
+                                key={v.size || 'base'}
                                 className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-bold"
                               >
                                 {v.label ? `${v.label} — ` : ''}{fmtPrice(v.price)}

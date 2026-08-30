@@ -8,10 +8,11 @@ import StatsPanel from './StatsPanel';
 import PrinterSettings from './PrinterSettings';
 import BackupPanel from './BackupPanel';
 import ExportPanel from './ExportPanel';
+import UpdatePanel from './UpdatePanel';
 import PinDialog from './PinDialog';
 import VolumeDialog from './VolumeDialog';
 import { roundPrice } from '../utils/format';
-import { getVolumes, hasVolumeChoice, lineId, volumeLabel } from '../utils/product';
+import { getVariants, hasSizeChoice, lineId } from '../utils/product';
 
 // =============================================
 // Утилиты для работы с деревом категорий
@@ -85,6 +86,7 @@ const POSApp = () => {
   const [showPrinterSettings, setShowPrinterSettings] = useState(false);
   const [showBackup, setShowBackup] = useState(false);
   const [showExport, setShowExport] = useState(false);
+  const [showUpdate, setShowUpdate] = useState(false);
   const [pinDialogMode, setPinDialogMode] = useState(null); // null | 'setup' | 'enter'
   const [volumeChoice, setVolumeChoice] = useState(null);   // товар, для которого выбирают объём
   const [categories, setCategories] = useState([]); // [{name, children:[...]}]
@@ -94,6 +96,8 @@ const POSApp = () => {
   const [printError, setPrintError] = useState(null);
   const [orderNumber, setOrderNumber] = useState(null);
   const [saveError, setSaveError] = useState(null);
+  // Есть ли готовое обновление — для метки в меню «Опции»
+  const [updateReady, setUpdateReady] = useState(false);
 
   // ----- Загрузка из Electron -----
   useEffect(() => {
@@ -112,6 +116,10 @@ const POSApp = () => {
     ipc.on('order-number', (event, num) => setOrderNumber(num));
     // Продажа не легла на диск — это важнее ошибки печати
     ipc.on('save-error', (event, message) => setSaveError(message));
+    // Метка в меню: обновление либо найдено, либо уже скачано
+    ipc.on('updater-status', (event, s) => {
+      setUpdateReady(!!s && (s.state === 'available' || s.state === 'downloaded'));
+    });
 
     // Запрашиваем сами, а не ждём рассылки от main: слушатель здесь
     // появляется только после монтирования, и рассылка могла его опередить
@@ -141,6 +149,7 @@ const POSApp = () => {
     setShowPrinterSettings(false);
     setShowBackup(false);
     setShowExport(false);
+    setShowUpdate(false);
   };
 
   // Открыть админку: сначала PIN. Если PIN ещё не задан — предложить создать.
@@ -184,6 +193,10 @@ const POSApp = () => {
       const next = !showExport;
       closeAllPanels();
       setShowExport(next);
+    } else if (option === 'update') {
+      const next = !showUpdate;
+      closeAllPanels();
+      setShowUpdate(next);
     }
   };
 
@@ -234,11 +247,11 @@ const POSApp = () => {
   const filteredProducts = currentProducts;
 
   // ----- Корзина -----
-  // Строки различаются парой товар+объём: один товар в разных объёмах —
-  // это разные строки, поэтому ключ строки не id, а lineId
-  const addToCart = (product, volume) => {
-    const vol = volume || getVolumes(product)[0];
-    const key = lineId(product.id, vol.ml);
+  // Строки различаются парой товар+размер: один товар в разных объёмах
+  // (или массах) — это разные строки, поэтому ключ строки не id, а lineId
+  const addToCart = (product, variant) => {
+    const vol = variant || getVariants(product)[0];
+    const key = lineId(product.id, vol);
 
     setCart(prev => {
       const existing = prev.find(item => item.lineId === key);
@@ -253,17 +266,19 @@ const POSApp = () => {
         name: product.name,
         image: product.image,
         categories: product.categories,
+        unit: vol.unit,
         ml: vol.ml,
-        volumeLabel: volumeLabel(vol.ml),
+        g: vol.g,
+        volumeLabel: vol.label,
         price: vol.price,
         quantity: 1
       }];
     });
   };
 
-  // Нажатие на товар: если объёмов несколько — сначала спросить какой
+  // Нажатие на товар: если размеров несколько — сначала спросить какой
   const handleProductClick = (product) => {
-    if (hasVolumeChoice(product)) {
+    if (hasSizeChoice(product)) {
       setVolumeChoice(product);
     } else {
       addToCart(product);
@@ -299,7 +314,9 @@ const POSApp = () => {
           id: item.id,
           name: item.name,
           categories: item.categories,
+          unit: item.unit,
           ml: item.ml,
+          g: item.g,
           price: item.price,
           quantity: item.quantity
         }))
@@ -457,9 +474,10 @@ const POSApp = () => {
     <div className="flex flex-col h-screen bg-gray-100 overflow-hidden">
       <Header
         onGoHome={handleGoHome}
-        showHome={categoryPath.length > 0 || showAdmin || showStats || showPrinterSettings || showBackup || showExport}
+        showHome={categoryPath.length > 0 || showAdmin || showStats || showPrinterSettings || showBackup || showExport || showUpdate}
         onOptionsSelect={handleOptionsSelect}
         onExit={handleExit}
+        updateReady={updateReady}
       />
 
       {showAdmin ? (
@@ -480,6 +498,8 @@ const POSApp = () => {
         <BackupPanel />
       ) : showExport ? (
         <ExportPanel />
+      ) : showUpdate ? (
+        <UpdatePanel cartCount={cart.length} />
       ) : (
         mainView
       )}

@@ -1,6 +1,6 @@
 import React from 'react';
 
-const Header = ({ onGoHome, showHome, onOptionsSelect, onExit }) => {
+const Header = ({ onGoHome, showHome, onOptionsSelect, onExit, updateReady }) => {
   const [time, setTime] = React.useState(new Date());
   const [showOptions, setShowOptions] = React.useState(false);
 
@@ -78,6 +78,18 @@ const Header = ({ onGoHome, showHome, onOptionsSelect, onExit }) => {
               >
                 <span className="text-xl">💾</span>
                 <span>Резервное копирование</span>
+              </button>
+              <button
+                onClick={() => { onOptionsSelect('update'); setShowOptions(false); }}
+                className="w-full text-left px-5 py-4 text-base text-gray-700 hover:bg-gray-100 flex items-center gap-3 border-b border-gray-100"
+              >
+                <span className="text-xl">⬆️</span>
+                <span className="flex-1">Обновление</span>
+                {updateReady && (
+                  <span className="px-2 py-0.5 bg-green-600 text-white rounded-full text-xs font-bold">
+                    новая
+                  </span>
+                )}
               </button>
               <button
                 onClick={() => { onExit(); setShowOptions(false); }}

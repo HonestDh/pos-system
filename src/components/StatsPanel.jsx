@@ -1,5 +1,15 @@
 import React, { useState } from 'react';
 
+// Размер позиции: масса у десертов, объём у напитков.
+// Нулевой размер не выводится — товар продан штучно.
+const sizeSuffix = (item) => {
+  const g = parseFloat(item.g);
+  if (g > 0) return ` ${g} г`;
+  const ml = parseFloat(item.ml);
+  if (ml > 0) return ` ${ml} мл`;
+  return '';
+};
+
 const StatsPanel = ({ stats }) => {
   const [selectedDay, setSelectedDay] = useState(null);
   const [selectedMonth, setSelectedMonth] = useState(null);
@@ -62,7 +72,7 @@ const StatsPanel = ({ stats }) => {
           <div key={i} className="flex justify-between py-1">
             <span>
               {item.name}
-              {parseInt(item.ml, 10) ? ` ${parseInt(item.ml, 10)} мл` : ''} × {item.quantity}
+              {sizeSuffix(item)} × {item.quantity}
             </span>
             <span>{formatCurrency(item.price * item.quantity)}</span>
           </div>

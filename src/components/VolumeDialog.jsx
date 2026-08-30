@@ -1,13 +1,15 @@
 import React from 'react';
 import { fmtPrice } from '../utils/format';
-import { getVolumes } from '../utils/product';
+import { getVariants, productUnit, UNIT_WEIGHT } from '../utils/product';
 
 /**
- * Выбор объёма стакана при добавлении товара в корзину.
- * Показывается только когда у товара задано больше одного объёма.
+ * Выбор размера порции при добавлении товара в корзину:
+ * объём стакана у напитков, масса у десертов.
+ * Показывается только когда у товара задано больше одного варианта.
  */
 const VolumeDialog = ({ product, onPick, onCancel }) => {
-  const volumes = getVolumes(product);
+  const variants = getVariants(product);
+  const isWeight = productUnit(product) === UNIT_WEIGHT;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
@@ -15,18 +17,20 @@ const VolumeDialog = ({ product, onPick, onCancel }) => {
         <div className="text-center mb-4">
           <div className="text-5xl mb-2">{product.image}</div>
           <h2 className="text-xl font-bold text-gray-900">{product.name}</h2>
-          <p className="text-sm text-gray-500 mt-1">Выберите объём</p>
+          <p className="text-sm text-gray-500 mt-1">
+            {isWeight ? 'Выберите массу' : 'Выберите объём'}
+          </p>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          {volumes.map(v => (
+          {variants.map(v => (
             <button
-              key={v.ml}
+              key={v.size || 'base'}
               onClick={() => onPick(v)}
               className="bg-gray-50 hover:bg-blue-50 border-2 border-gray-200 hover:border-blue-400 rounded-xl p-4 flex flex-col items-center gap-1 active:scale-95 min-h-[92px]"
             >
-              <span className="text-2xl font-bold text-gray-900">{v.ml}</span>
-              <span className="text-xs text-gray-500 leading-none">мл</span>
+              <span className="text-2xl font-bold text-gray-900">{v.size}</span>
+              <span className="text-xs text-gray-500 leading-none">{isWeight ? 'г' : 'мл'}</span>
               <span className="text-lg font-bold text-blue-600 mt-1">{fmtPrice(v.price)}</span>
             </button>
           ))}

@@ -10,7 +10,8 @@
     "build": "webpack --config webpack.config.js --mode production",
     "postinstall": "electron-builder install-app-deps",
     "pack": "electron-builder --dir",
-    "dist": "npm run build && electron-builder"
+    "dist": "npm run build && electron-builder",
+    "release": "npm run build && electron-builder --publish always"
   },
   "keywords": [
     "pos",
@@ -20,6 +21,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "electron-updater": "^5.3.0",
     "node-thermal-printer": "^4.6.1",
     "nodemailer": "^9.0.5",
     "react": "^18.2.0",
@@ -54,13 +56,28 @@
     "productName": "POS System",
     "files": [
       "main.js",
+      "updater.js",
       "public/**/*",
       "node_modules/**/*",
       "!node_modules/**/*.map",
       "!node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme,test,**/test/**}"
     ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "HonestDh",
+        "repo": "pos-system"
+      }
+    ],
     "win": {
       "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "POS-Setup-${version}.${ext}"
     }
   }
 }

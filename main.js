@@ -2,13 +2,14 @@ const electron = require('electron');
 const { app, BrowserWindow, ipcMain, shell } = electron;
 const path = require('path');
 const fs = require('fs');
+const { setupUpdater, stopUpdater } = require('./updater');
 
 const isDev = !app.isPackaged;
 
 // Круглит число до 2 знаков (для цен и сумм)
 const round2 = (n) => Math.round(parseFloat(n) * 100) / 100;
 
-let CONFIG_PATH, SALES_PATH, PRINTER_CONFIG_PATH, PIN_PATH, EMAIL_CONFIG_PATH;
+let CONFIG_PATH, SALES_PATH, PRINTER_CONFIG_PATH, PIN_PATH, PIN_ROOT_PATH, EMAIL_CONFIG_PATH;
 
 function initPaths() {
   CONFIG_PATH = path.join(app.getPath('userData'), 'config.json');
@@ -16,18 +17,23 @@ function initPaths() {
   PRINTER_CONFIG_PATH = path.join(app.getPath('userData'), 'printer.json');
   EMAIL_CONFIG_PATH = path.join(app.getPath('userData'), 'email.json');
 
-  // PIN — в корневой папке программы (рядом с exe в собранной версии,
-  // в корне проекта при разработке)
+  // PIN хранится в userData: папку рядом с exe установщик при обновлении
+  // перезаписывает, и файл оттуда может исчезнуть.
+  PIN_PATH = path.join(app.getPath('userData'), 'pin.txt');
+
+  // Файл рядом с exe остаётся способом задать PIN вручную, не заходя
+  // в программу: если он есть, он и считается настоящим PIN-кодом.
   const rootDir = isDev ? __dirname : path.dirname(app.getPath('exe'));
-  PIN_PATH = path.join(rootDir, 'pin.txt');
+  PIN_ROOT_PATH = path.join(rootDir, 'pin.txt');
 }
 
 // ---------- PIN админки ----------
 
-function loadPin() {
+// Читает 4-значный PIN из файла; null, если файла нет или он испорчен
+function readPinFile(filePath) {
   try {
-    if (fs.existsSync(PIN_PATH)) {
-      const raw = fs.readFileSync(PIN_PATH, 'utf8').trim();
+    if (fs.existsSync(filePath)) {
+      const raw = fs.readFileSync(filePath, 'utf8').trim();
       // Валидный PIN — ровно 4 цифры
       if (/^\d{4}$/.test(raw)) return raw;
     }
@@ -37,12 +43,39 @@ function loadPin() {
   return null;
 }
 
+/**
+ * PIN из файла рядом с exe имеет приоритет: это способ сбросить забытый
+ * код, положив рядом с программой pin.txt. Основное же хранилище —
+ * userData, потому что оно переживает обновление.
+ */
+function loadPin() {
+  const fromRoot = readPinFile(PIN_ROOT_PATH);
+  if (fromRoot) {
+    // Подхватываем PIN, заданный вручную (и заодно переносим сюда PIN
+    // из старых версий, где userData ещё не использовался)
+    if (readPinFile(PIN_PATH) !== fromRoot) {
+      try { writeFileAtomic(PIN_PATH, fromRoot); } catch (error) {
+        console.error('Не удалось перенести PIN в userData:', error);
+      }
+    }
+    return fromRoot;
+  }
+  return readPinFile(PIN_PATH);
+}
+
 function savePin(pin) {
   if (!/^\d{4}$/.test(String(pin))) {
     return { ok: false, error: 'PIN должен состоять из 4 цифр' };
   }
   try {
     writeFileAtomic(PIN_PATH, String(pin));
+    // Файл рядом с exe удаляем: иначе он бы навсегда перебивал
+    // новый код, заданный из программы
+    try {
+      if (fs.existsSync(PIN_ROOT_PATH)) fs.unlinkSync(PIN_ROOT_PATH);
+    } catch (error) {
+      console.error('Не удалось удалить pin.txt рядом с программой:', error);
+    }
     return { ok: true };
   } catch (error) {
     console.error('Ошибка сохранения PIN:', error);
@@ -599,6 +632,19 @@ function formatPaymentMethod(method) {
   }
 }
 
+/**
+ * Подпись размера позиции: «400 мл» у напитков, «150 г» у десертов.
+ * Незаданный или нулевой размер подписи не имеет — такая позиция
+ * выводится одним названием (штучный товар).
+ */
+function itemSizeLabel(item) {
+  const g = parseFloat(item && item.g);
+  if (g > 0) return `${g} г`;
+  const ml = parseFloat(item && item.ml);
+  if (ml > 0) return `${ml} мл`;
+  return '';
+}
+
 // Чек для кухни: только номер заказа и что готовить. Никаких цен, итогов,
 // оплаты и сдачи — они кухне не нужны, а лишние строки замедляют чтение.
 async function printReceipt(printerConfig, items, orderNumber, date) {
@@ -638,8 +684,9 @@ async function printReceipt(printerConfig, items, orderNumber, date) {
     let totalUnits = 0;
     lines.forEach(item => {
       const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
-      const ml = parseInt(item.ml, 10);
-      const label = ml ? `${item.name || 'Товар'} ${ml} мл` : (item.name || 'Товар');
+      const size = itemSizeLabel(item);
+      const name = item.name || 'Товар';
+      const label = size ? `${name} ${size}` : name;
       for (let i = 0; i < qty; i++) {
         printer.println(label);
         totalUnits += 1;
@@ -699,6 +746,7 @@ function createWindow() {
 app.whenReady().then(() => {
   initPaths();
   createWindow();
+  setupUpdater();
 
   // Прогреваем процесс печати заранее, чтобы первый чек не ждал
   // компиляцию C# — но только если печать вообще включена
@@ -710,7 +758,10 @@ app.on('window-all-closed', () => {
 });
 
 // Не оставляем висеть powershell.exe после закрытия программы
-app.on('before-quit', () => stopPrintWorker());
+app.on('before-quit', () => {
+  stopPrintWorker();
+  stopUpdater();
+});
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -808,18 +859,18 @@ function buildReports(dateFrom, dateTo) {
   });
 
   // --- По товарам ---
-  // Один товар в разных объёмах — разные строки отчёта: 400 мл и 250 мл
+  // Один товар в разных размерах — разные строки отчёта: 400 мл и 250 мл
   // продаются по разной цене, смешивать их в одну строку нельзя
   const byProduct = new Map();
   sales.forEach(s => {
     (s.items || []).forEach(item => {
       const cats = Array.isArray(item.categories) ? item.categories : [];
-      const ml = parseInt(item.ml, 10) || null;
-      const key = `${item.name}|${ml || ''}|${cats.join(' / ')}`;
+      const size = itemSizeLabel(item);
+      const key = `${item.name}|${size}|${cats.join(' / ')}`;
       if (!byProduct.has(key)) {
         byProduct.set(key, {
           name: item.name,
-          volume: ml ? `${ml} мл` : '',
+          volume: size,
           category: cats.join(' / ') || 'Без категории',
           qty: 0,
           revenue: 0
@@ -845,7 +896,7 @@ function buildReports(dateFrom, dateTo) {
         d.toLocaleDateString('ru-RU'),
         d.toLocaleTimeString('ru-RU'),
         item.name,
-        parseInt(item.ml, 10) ? `${parseInt(item.ml, 10)} мл` : '',
+        itemSizeLabel(item),
         (Array.isArray(item.categories) ? item.categories : []).join(' / ') || 'Без категории',
         item.quantity,
         csvNum(item.price),
@@ -863,8 +914,8 @@ function buildReports(dateFrom, dateTo) {
     files: [
       { name: 'svodka.csv', content: buildCsv(['Показатель', 'Значение', ''], summaryRows) },
       { name: 'po-dnyam.csv', content: buildCsv(['Дата', 'Чеков', 'Выручка', 'Средний чек'], dayRows) },
-      { name: 'po-tovaram.csv', content: buildCsv(['Товар', 'Объём', 'Категория', 'Продано', 'Выручка'], productRows) },
-      { name: 'cheki.csv', content: buildCsv(['№ чека', 'Дата', 'Время', 'Товар', 'Объём', 'Категория', 'Кол-во', 'Цена', 'Сумма', 'Оплата', 'Итог чека'], receiptRows) }
+      { name: 'po-tovaram.csv', content: buildCsv(['Товар', 'Размер', 'Категория', 'Продано', 'Выручка'], productRows) },
+      { name: 'cheki.csv', content: buildCsv(['№ чека', 'Дата', 'Время', 'Товар', 'Размер', 'Категория', 'Кол-во', 'Цена', 'Сумма', 'Оплата', 'Итог чека'], receiptRows) }
     ]
   };
 }
