@@ -1,137 +1,130 @@
 # 🛒 POS System
 
-Современная система точек продаж (POS) для Windows-планшетов, построенная на Electron, React и Tailwind CSS.
+Modern Point of Sale (POS) system for Windows tablets, built with Electron, React, and Tailwind CSS.
 
-## ✨ Основные возможности
+## ✨ Features
 
-- 📱 **Удобный интерфейс** — современный дизайн на базе Tailwind CSS
-- 📦 **Управление товарами** — добавление, редактирование, удаление с поддержкой категорий
-- 📊 **Статистика продаж** — отчёты по дням, месяцам, товарам и способам оплаты
-- 🖨️ **Автоматическая печать** — чеки на кухню через Windows Print Spooler
-- 💰 **Разные способы оплаты** — наличные, карта, сдельно
-- 📈 **Экспорт отчётов** — CSV-файлы для Excel (сводка, динамика, товары, чеки)
-- 📧 **Отправка отчётов** — email-рассылка отчётов на заданный адрес
-- 🔐 **PIN-защита** — админка защищена 4-значным кодом
-- 🔄 **Автообновления** — обновления через GitHub Releases
-- 💾 **Резервное копирование** — экспорт/восстановление данных
+- 📱 **User-friendly interface** — modern design based on Tailwind CSS
+- 📦 **Product management** — add, edit, delete products with category support
+- 📊 **Sales statistics** — reports by days, months, products, and payment methods
+- 🖨️ **Automatic printing** — kitchen receipts via Windows Print Spooler
+- 💰 **Multiple payment methods** — cash, card, separate billing
+- 📈 **Export reports** — CSV files for Excel (summary, dynamics, products, receipts)
+- 📧 **Report sending** — email distribution of reports to specified address
+- 🔐 **PIN protection** — admin panel protected with 4-digit code
+- 🔄 **Auto-updates** — updates via GitHub Releases
+- 💾 **Backup system** — export/restore data
 
-## 📋 Требования
+## 📋 Requirements
 
-- Windows 10/11 (для планшета или ПК)
-- 4 ГБ ОЗУ (минимум)
-- 500 МБ свободного места
+- Windows 10/11 (for tablet or PC)
+- 4 GB RAM (minimum)
+- 500 MB free space
 
-## ⚙️ Установка
+## ⚙️ Installation
 
-### Стандартная установка
+### Standard installation
 
-1. Скачайте установщик с [релизов GitHub](https://github.com/HonestDh/pos-system/releases)
-2. Запустите `POS-Setup-*.exe`
-3. Следуйте инструкциям установщика
+1. Download the installer from [GitHub Releases](https://github.com/HonestDh/pos-system/releases)
+2. Run `POS-Setup-*.exe`
+3. Follow the installation instructions
 
-### Ручная установка (для разработчиков)
+### Manual installation (for developers)
 
 ```bash
-# Клонирование репозитория
+# Clone the repository
 git clone https://github.com/HonestDh/pos-system.git
 cd pos-system
 
-# Установка зависимостей
+# Install dependencies
 npm install
 
-# Запуск в режиме разработки
+# Run in development mode
 npm start
 ```
 
-## 🎮 Как пользоваться
+## 🎮 How to use
 
-### Основной экран
+### Main screen
 
-1. **Выберите категорию** — нажмите на папку или товар
-2. **Добавьте товар в корзину** — при клике на товар:
-   - Если у товара один размер — добавляется сразу
-   - Если несколько размеров — выберите нужный
-3. **Оплатите** — введите сумму, выберите способ оплаты, нажмите "Оплатить"
-4. **Печать чека** — автоматически печатается на кухне
+1. **Select category** — click on folder or product
+2. **Add product to cart** — when clicking on product:
+   - If product has one size — adds immediately
+   - If multiple sizes — select required size
+3. **Pay** — enter amount, select payment method, click "Pay"
+4. **Receipt printing** — automatically prints to kitchen
 
-### Админка (требует PIN)
+### Admin panel (requires PIN)
 
-1. Нажмите "Опции" → "Админка"
-2. Введите PIN (по умолчанию: 1234, если не меняли)
-3. Управляйте товарами и категориями
+1. Click "Options" → "Admin"
+2. Enter PIN (default: 1234 if not changed)
+3. Manage products and categories
 
-### Статистика
+### Statistics
 
-1. Нажмите "Опции" → "Статистика"
-2. Просмотрите сводку по всему времени
-3. Нажмите "Подробнее" у месяца/дня для деталей
+1. Click "Options" → "Statistics"
+2. View summary for all time
+3. Click "More details" for month/day to see details
 
-### Настройки
+### Settings
 
-- **Принтер** — выберите принтер и настройте параметры
-- **Бэкап** — создайте резервную копию данных
-- **Экспорт** — выгрузите отчёты в CSV
-- **Обновления** — проверьте наличие новых версий
+- **Printer** — select printer and configure settings
+- **Backup** — create data backup
+- **Export** — download reports to CSV
+- **Updates** — check for new versions
 
-## 🛠️ Разработка
+## 🛠️ Development
 
-### Структура проекта
+### Project structure
 
 ```
 pos/
 ├── src/
-│   ├── components/     # React-компоненты
-│   │   ├── POSApp.jsx  # Основной компонент
+│   ├── components/     # React components
+│   │   ├── POSApp.jsx  # Main component
 │   │   ├── AdminPanel.jsx
 │   │   ├── ProductGrid.jsx
 │   │   ├── Cart.jsx
 │   │   ├── Payment.jsx
 │   │   └── ...
-│   ├── utils/          # Утилиты
+│   ├── utils/          # Utilities
 │   │   ├── format.js
 │   │   └── product.js
-│   └── index.jsx       # Точка входа
+│   └── index.jsx       # Entry point
 ├── main.js             # Electron main process
-├── updater.js          # Автообновления
+├── updater.js          # Auto-updates
 ├── package.json
 └── webpack.config.js
 ```
 
-### Команды
+### Commands
 
-| Команда | Описание |
-|---------|----------|
-| `npm start` | Запуск в режиме разработки (Electron + Webpack) |
-| `npm run dev` | Только Webpack dev server |
-| `npm run electron` | Только Electron |
-| `npm run build` | Сборка для продакшена |
-| `npm run dist` | Создание установщика |
-| `npm run pack` | Сборка без упаковки |
+| Command | Description |
+|---------|-------------|
+| `npm start` | Run in development mode (Electron + Webpack) |
+| `npm run dev` | Webpack dev server only |
+| `npm run electron` | Electron only |
+| `npm run build` | Production build |
+| `npm run dist` | Create installer |
+| `npm run pack` | Build without packaging |
 
-### Технологии
+### Technologies
 
 - **Frontend**: React 18, Tailwind CSS, Webpack
 - **Backend**: Electron 25, Node.js
-- **Печать**: node-thermal-printer, Windows Print Spooler
-- **Обновления**: electron-updater
+- **Printing**: node-thermal-printer, Windows Print Spooler
+- **Updates**: electron-updater
 
-## 🔐 Безопасность
+## ��� Security
 
-- PIN-код хранится в зашифрованном виде в `userData`
-- Данные продаж сохраняются атомарно (переименованием файлов)
-- Повреждённые файлы перемещаются в "карантин"
+- PIN code is stored encrypted in `userData`
+- Sales data is saved atomically (file renaming)
+- Corrupted files are moved to "quarantine"
 
-## 📄 Лицензия
+## 📄 License
 
 ISC
 
-## 👥 Автор
+## 👥 Author
 
 [HonestDh](https://github.com/HonestDh)
-
-## 🙏 Благодарности
-
-- [Electron](https://www.electronjs.org/)
-- [React](https://react.dev/)
-- [Tailwind CSS](https://tailwindcss.com/)
-- [node-thermal-printer](https://github.com/odanado/node-thermal-printer)
