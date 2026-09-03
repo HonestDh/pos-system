@@ -4,7 +4,7 @@ import { VOLUME_OPTIONS, UNIT_VOLUME, UNIT_WEIGHT, getVariants } from '../utils/
 
 const num = (value) => parseFloat(String(value ?? '').replace(',', '.'));
 
-const AdminPanel = ({ products, categories, onAddProduct, onDeleteProduct, onAddCategory, onDeleteCategory, allFolders }) => {
+const AdminPanel = ({ products, categories, onAddProduct, onDeleteProduct, onUpdateProduct, onAddCategory, onDeleteCategory, allFolders }) => {
   const [activeTab, setActiveTab] = useState('products');
   const [newProduct, setNewProduct] = useState({ name: '', image: '📦', selectedFolder: 'root' });
   // Тип товара: напитки продаются по объёму, десерты — по массе
@@ -20,6 +20,8 @@ const AdminPanel = ({ products, categories, onAddProduct, onDeleteProduct, onAdd
   const [newCategoryFolder, setNewCategoryFolder] = useState('root');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [formError, setFormError] = useState('');
+  // Режим редактирования товара
+  const [editingProduct, setEditingProduct] = useState(null);
 
   const emojis = ['📦', '☕', '🍵', '🍊', '💧', '🍔', '🍕', '🥗', '🍝', '🍩', '🍰', '🍦', '🍟', '🍗', '🍎', '🍌', '🍇', '🍓', '🍒', '🍍'];
 
@@ -65,8 +67,10 @@ const AdminPanel = ({ products, categories, onAddProduct, onDeleteProduct, onAdd
     setPrices({});
     setCustomVolume({ size: '', price: '' });
     setWeight({ size: '', price: '' });
+    setUnit(UNIT_VOLUME);
     setShowEmojiPicker(false);
     setFormError('');
+    setEditingProduct(null);
   };
 
   const handleAddProduct = () => {
@@ -83,21 +87,64 @@ const AdminPanel = ({ products, categories, onAddProduct, onDeleteProduct, onAdd
       return;
     }
 
-    onAddProduct({
+    const productData = {
       name: newProduct.name.trim(),
       categories: getProductCategories(),
       image: newProduct.image,
       unit,
       volumes,
-      // Базовая цена = самый маленький вариант: пригодится, если товар
-      // когда-нибудь окажется в коде, не знающем про volumes
       price: volumes[0].price
-    });
+    };
+
+    if (editingProduct) {
+      onUpdateProduct({ ...editingProduct, ...productData });
+    } else {
+      onAddProduct(productData);
+    }
     resetForm();
   };
 
   const switchUnit = (next) => {
     setUnit(next);
+    setFormError('');
+  };
+
+  const handleEditProduct = (product) => {
+    setEditingProduct(product);
+    setNewProduct({
+      name: product.name || '',
+      image: product.image || '📦',
+      selectedFolder: product.categories && product.categories.length > 0
+        ? JSON.stringify(product.categories)
+        : 'root'
+    });
+    setUnit(product.unit || UNIT_VOLUME);
+
+    // Восстанавливаем цены
+    const newPrices = {};
+    const newWeight = { size: '', price: '' };
+    const newCustomVolume = { size: '', price: '' };
+
+    if (Array.isArray(product.volumes)) {
+      product.volumes.forEach(v => {
+        if (product.unit === UNIT_WEIGHT) {
+          newWeight.size = String(v.g || '');
+          newWeight.price = String(v.price || '');
+        } else {
+          if (VOLUME_OPTIONS.includes(v.ml)) {
+            newPrices[v.ml] = String(v.price || '');
+          } else {
+            newCustomVolume.size = String(v.ml || '');
+            newCustomVolume.price = String(v.price || '');
+          }
+        }
+      });
+    }
+
+    setPrices(newPrices);
+    setWeight(newWeight);
+    setCustomVolume(newCustomVolume);
+    setShowEmojiPicker(false);
     setFormError('');
   };
 
@@ -360,8 +407,16 @@ const AdminPanel = ({ products, categories, onAddProduct, onDeleteProduct, onAdd
                   onClick={handleAddProduct}
                   className="w-full bg-green-600 text-white py-3 rounded-xl hover:bg-green-700 font-bold text-base transition-colors active:scale-[0.98] min-h-[48px]"
                 >
-                  Добавить товар
+                  {editingProduct ? 'Сохранить изменения' : 'Добавить товар'}
                 </button>
+                {editingProduct && (
+                  <button
+                    onClick={resetForm}
+                    className="w-full mt-3 bg-gray-400 text-white py-2 rounded-xl hover:bg-gray-50 font-bold text-sm transition-colors active:scale-[0.98] min-h-[44px]"
+                  >
+                    Отмена редактирования
+                  </button>
+                )}
               </div>
             </div>
 
@@ -394,12 +449,21 @@ const AdminPanel = ({ products, categories, onAddProduct, onDeleteProduct, onAdd
                           </div>
                         </div>
                       </div>
-                      <button
-                        onClick={() => onDeleteProduct(product.id)}
-                        className="text-red-500 hover:text-red-700 px-4 py-2 rounded-lg hover:bg-red-50 transition-colors text-sm font-medium min-w-[44px] min-h-[44px] flex items-center justify-center flex-shrink-0"
-                      >
-                        ✕
-                      </button>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <button
+                          onClick={() => handleEditProduct(product)}
+                          className="text-blue-500 hover:text-blue-700 px-3 py-2 rounded-lg hover:bg-blue-50 transition-colors text-sm font-medium min-w-[44px] min-h-[44px] flex items-center justify-center"
+                          title="Редактировать"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          onClick={() => onDeleteProduct(product.id)}
+                          className="text-red-500 hover:text-red-700 px-4 py-2 rounded-lg hover:bg-red-50 transition-colors text-sm font-medium min-w-[44px] min-h-[44px] flex items-center justify-center"
+                        >
+                          ✕
+                        </button>
+                      </div>
                     </div>
                   ))}
                   {products.length === 0 && (

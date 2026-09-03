@@ -347,6 +347,12 @@ const POSApp = () => {
     }]);
   };
 
+  const handleUpdateProduct = (updatedProduct) => {
+    setProducts(prev => prev.map(p =>
+      p.id === updatedProduct.id ? updatedProduct : p
+    ));
+  };
+
   const handleDeleteProduct = (productId) => {
     setProducts(prev => prev.filter(p => p.id !== productId));
   };
@@ -485,6 +491,7 @@ const POSApp = () => {
           products={products}
           categories={categories}
           onAddProduct={handleAddProduct}
+          onUpdateProduct={handleUpdateProduct}
           onDeleteProduct={handleDeleteProduct}
           onAddCategory={handleAddCategory}
           onDeleteCategory={handleDeleteCategory}
