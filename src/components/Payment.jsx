@@ -161,6 +161,19 @@ const Payment = ({ cartTotal, paymentMode, setPaymentMode, amountReceived, setAm
           dueAmount={padConfig[padField].due}
           onConfirm={(v) => { padConfig[padField].apply(v); setPadField(null); }}
           onCancel={() => setPadField(null)}
+          onPayment={(currentValue) => {
+            const valueStr = String(currentValue);
+            padConfig[padField].apply(valueStr);
+            setPadField(null);
+
+            if (padField === 'received') {
+              if (currentValue >= cartTotal) onPayment();
+            } else if (padField === 'cash' || padField === 'card') {
+              const cash = padField === 'cash' ? currentValue : (parseFloat(cashAmount) || 0);
+              const card = padField === 'card' ? currentValue : (parseFloat(cardAmount) || 0);
+              if (cash + card >= cartTotal) onPayment();
+            }
+          }}
         />
       )}
     </div>

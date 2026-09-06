@@ -8,7 +8,7 @@ import { fmtPrice } from '../utils/format';
  * Значения снаружи всегда в виде строки с точкой ("12.5"), чтобы parseFloat
  * работал везде одинаково. Внутри для показа используется запятая.
  */
-const AmountPad = ({ title, initialValue, dueAmount, onConfirm, onCancel }) => {
+const AmountPad = ({ title, initialValue, dueAmount, onConfirm, onCancel, onPayment }) => {
   // Приводим входное значение к виду для показа: точка -> запятая
   const [draft, setDraft] = useState(() => {
     const v = String(initialValue ?? '').trim();
@@ -122,11 +122,24 @@ const AmountPad = ({ title, initialValue, dueAmount, onConfirm, onCancel }) => {
           </button>
           <button
             onClick={confirm}
-            className="py-3 rounded-xl font-bold text-base text-white bg-green-600 hover:bg-green-700 min-h-[48px]"
+            className="py-3 rounded-xl font-bold text-base text-white bg-blue-600 hover:bg-blue-700 min-h-[48px]"
           >
             Готово
           </button>
         </div>
+        {onPayment && (
+          <button
+            onClick={() => onPayment(value)}
+            disabled={due !== null && value < due}
+            className={`w-full mt-2.5 py-3 rounded-xl font-bold text-base min-h-[48px] ${
+              due !== null && value < due
+                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                : 'bg-green-600 text-white hover:bg-green-700'
+            }`}
+          >
+            💰 Оплатить
+          </button>
+        )}
       </div>
     </div>
   );
