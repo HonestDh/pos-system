@@ -112,27 +112,36 @@ function writeVersionHistory(history) {
 
 /**
  * Создаёт backup текущей версии перед обновлением.
- * Копирует .exe в папку backups/ и обновляет метаданные.
+ * Сохраняет скачанный установщик для возможности отката.
  */
 async function createBackup() {
   if (isDev) return { ok: false, reason: 'dev' };
 
   try {
-    const exePath = app.getPath('exe');
     const currentVersion = app.getVersion();
+
+    // Получаем путь к скачанному установщику из autoUpdater
+    const installerPath = status.downloadedInstallerPath;
+
+    if (!installerPath || !fs.existsSync(installerPath)) {
+      console.log('[Backup] Установщик не найден, пропускаем backup');
+      return { ok: false, reason: 'Установщик не найден' };
+    }
+
     const backupFileName = `app-backup-${currentVersion}.exe`;
     const backupPath = path.join(BACKUPS_DIR, backupFileName);
 
     console.log('[Backup] Создание backup версии', currentVersion);
+    console.log('[Backup] Источник:', installerPath);
 
     // Создаём папку backups, если её нет
     if (!fs.existsSync(BACKUPS_DIR)) {
       fs.mkdirSync(BACKUPS_DIR, { recursive: true });
     }
 
-    // Копируем текущий .exe в backup
-    fs.copyFileSync(exePath, backupPath);
-    console.log('[Backup] Файл скопирован:', backupPath);
+    // Копируем скачанный установщик в backup
+    fs.copyFileSync(installerPath, backupPath);
+    console.log('[Backup] Установщик скопирован:', backupPath);
 
     // Обновляем метаданные
     const history = readVersionHistory();
@@ -296,6 +305,11 @@ function initAutoUpdater() {
   });
 
   autoUpdater.on('update-downloaded', (info) => {
+    // Сохраняем путь к скачанному установщику для backup
+    status.downloadedInstallerPath = autoUpdater.downloadedUpdateHelper
+      ? autoUpdater.downloadedUpdateHelper.installerPath
+      : null;
+
     setStatus({
       state: 'downloaded',
       version: info && info.version,
