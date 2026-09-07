@@ -201,11 +201,18 @@ function rollbackToPrevious() {
       return { ok: false, reason: 'Файл backup повреждён' };
     }
 
-    // Запускаем установщик предыдущей версии с тихой установкой
+    // Копируем установщик во временную папку, чтобы избежать проблем с DLL
+    const tempDir = app.getPath('temp');
+    const tempInstallerPath = path.join(tempDir, `pos-rollback-${Date.now()}.exe`);
+
+    console.log('[Rollback] Копирование во временную папку:', tempInstallerPath);
+    fs.copyFileSync(backupPath, tempInstallerPath);
+
+    // Запускаем установщик из временной папки с тихой установкой
     const { spawn } = require('child_process');
     console.log('[Rollback] Запуск установщика...');
 
-    spawn(backupPath, ['/S'], {
+    spawn(tempInstallerPath, ['/S'], {
       detached: true,
       stdio: 'ignore'
     }).unref();
