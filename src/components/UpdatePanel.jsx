@@ -12,12 +12,14 @@ const ipc = () => (window.electron ? window.electron.ipcRenderer : null);
 const UpdatePanel = ({ cartCount = 0 }) => {
   const [status, setStatus] = useState(null);
   const [installError, setInstallError] = useState('');
+  const [backupInfo, setBackupInfo] = useState(null);
 
   useEffect(() => {
     const channel = ipc();
     if (!channel) return;
 
     channel.invoke('updater-get-status').then(setStatus).catch(() => {});
+    channel.invoke('updater-get-backup-info').then(setBackupInfo).catch(() => {});
 
     const onStatus = (event, next) => setStatus(next);
     channel.on('updater-status', onStatus);
@@ -42,6 +44,19 @@ const UpdatePanel = ({ cartCount = 0 }) => {
     }
     setInstallError('');
     ipc().invoke('updater-install').catch(() => {});
+  };
+
+  const rollback = () => {
+    if (cartCount > 0) {
+      setInstallError('Сначала завершите или очистите текущий заказ — программа перезапустится');
+      return;
+    }
+    setInstallError('');
+    ipc().invoke('updater-rollback').then(result => {
+      if (!result.ok) {
+        setInstallError(result.reason || 'Ошибка отката');
+      }
+    }).catch(() => {});
   };
 
   const busy = status.state === 'checking' || status.state === 'downloading';
@@ -159,6 +174,32 @@ const UpdatePanel = ({ cartCount = 0 }) => {
             )}
           </div>
         </div>
+
+        {backupInfo && backupInfo.hasBackup && (
+          <div className="bg-white rounded-2xl shadow-sm p-5">
+            <h2 className="text-xl font-bold text-gray-800 mb-3">История версий</h2>
+            <div className="p-4 rounded-xl bg-gray-50 border border-gray-200">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <div className="text-sm text-gray-500 font-medium">Предыдущая версия</div>
+                  <div className="text-2xl font-bold text-gray-900">{backupInfo.previous}</div>
+                </div>
+                <div className="text-4xl">⏪</div>
+              </div>
+              <div className="text-sm text-gray-600 mb-3">
+                Если новая версия работает некорректно, можно откатиться на предыдущую.
+                Программа перезапустится. Данные сохранятся.
+              </div>
+              <button
+                onClick={rollback}
+                disabled={cartCount > 0}
+                className="w-full px-6 py-3 rounded-xl font-bold text-base min-h-[48px] bg-amber-600 text-white hover:bg-amber-700 disabled:bg-gray-200 disabled:text-gray-400 active:scale-[0.98]"
+              >
+                Откатить до версии {backupInfo.previous}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

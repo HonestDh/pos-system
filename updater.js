@@ -6,8 +6,15 @@
 // он и работает сервером обновлений.
 
 const { app, ipcMain, BrowserWindow } = require('electron');
+const fs = require('fs');
+const path = require('path');
 
 const isDev = !app.isPackaged;
+
+// Пути для системы отката
+const BACKUPS_DIR = path.join(app.getPath('userData'), 'backups');
+const VERSION_HISTORY_PATH = path.join(app.getPath('userData'), 'version-history.json');
+const MAX_BACKUPS = 2;
 
 // Первая проверка не сразу при запуске: касса в этот момент открывает
 // окно и прогревает принтер, сетевой запрос тут ни к чему
@@ -71,6 +78,162 @@ function describeError(error) {
   }
   return raw || 'Неизвестная ошибка обновления';
 }
+
+// ==================== Система отката версий ====================
+
+/**
+ * Читает историю версий из файла. Если файла нет — возвращает базовую структуру.
+ */
+function readVersionHistory() {
+  try {
+    if (fs.existsSync(VERSION_HISTORY_PATH)) {
+      const raw = fs.readFileSync(VERSION_HISTORY_PATH, 'utf8');
+      return JSON.parse(raw);
+    }
+  } catch (error) {
+    console.error('Ошибка чтения version-history.json:', error);
+  }
+  return { current: app.getVersion(), previous: null, backups: [] };
+}
+
+/**
+ * Сохраняет историю версий в файл.
+ */
+function writeVersionHistory(history) {
+  try {
+    if (!fs.existsSync(path.dirname(VERSION_HISTORY_PATH))) {
+      fs.mkdirSync(path.dirname(VERSION_HISTORY_PATH), { recursive: true });
+    }
+    fs.writeFileSync(VERSION_HISTORY_PATH, JSON.stringify(history, null, 2), 'utf8');
+  } catch (error) {
+    console.error('Ошибка записи version-history.json:', error);
+  }
+}
+
+/**
+ * Создаёт backup текущей версии перед обновлением.
+ * Копирует .exe в папку backups/ и обновляет метаданные.
+ */
+async function createBackup() {
+  if (isDev) return { ok: false, reason: 'dev' };
+
+  try {
+    const exePath = app.getPath('exe');
+    const currentVersion = app.getVersion();
+    const backupFileName = `app-backup-${currentVersion}.exe`;
+    const backupPath = path.join(BACKUPS_DIR, backupFileName);
+
+    console.log('[Backup] Создание backup версии', currentVersion);
+
+    // Создаём папку backups, если её нет
+    if (!fs.existsSync(BACKUPS_DIR)) {
+      fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+    }
+
+    // Копируем текущий .exe в backup
+    fs.copyFileSync(exePath, backupPath);
+    console.log('[Backup] Файл скопирован:', backupPath);
+
+    // Обновляем метаданные
+    const history = readVersionHistory();
+    history.previous = currentVersion;
+    history.backups = history.backups.filter(b => b.version !== currentVersion);
+    history.backups.unshift({
+      version: currentVersion,
+      file: backupFileName,
+      date: new Date().toISOString().split('T')[0]
+    });
+
+    // Ограничиваем количество backup'ов
+    if (history.backups.length > MAX_BACKUPS) {
+      const toRemove = history.backups.slice(MAX_BACKUPS);
+      toRemove.forEach(b => {
+        const oldPath = path.join(BACKUPS_DIR, b.file);
+        if (fs.existsSync(oldPath)) {
+          fs.unlinkSync(oldPath);
+          console.log('[Backup] Удалён старый backup:', b.version);
+        }
+      });
+      history.backups = history.backups.slice(0, MAX_BACKUPS);
+    }
+
+    writeVersionHistory(history);
+    console.log('[Backup] Метаданные обновлены');
+    return { ok: true, backupPath };
+  } catch (error) {
+    console.error('[Backup] Ошибка создания backup:', error);
+    return { ok: false, reason: error.message };
+  }
+}
+
+/**
+ * Откатывает приложение на предыдущую версию.
+ * Запускает сохранённый backup установщик и закрывает текущее приложение.
+ */
+function rollbackToPrevious() {
+  if (isDev) return { ok: false, reason: 'Откат доступен только в установленной версии' };
+
+  try {
+    const history = readVersionHistory();
+
+    if (!history.previous || history.backups.length === 0) {
+      console.log('[Rollback] Нет доступных backup для отката');
+      return { ok: false, reason: 'Нет доступных версий для отката' };
+    }
+
+    const backup = history.backups[0];
+    const backupPath = path.join(BACKUPS_DIR, backup.file);
+
+    console.log('[Rollback] Откат на версию', backup.version);
+    console.log('[Rollback] Путь к backup:', backupPath);
+
+    if (!fs.existsSync(backupPath)) {
+      console.error('[Rollback] Файл backup не найден');
+      return { ok: false, reason: 'Файл backup не найден. Откат невозможен' };
+    }
+
+    // Проверка целостности: файл должен быть разумного размера (> 50MB)
+    const stats = fs.statSync(backupPath);
+    console.log('[Rollback] Размер файла:', Math.round(stats.size / 1024 / 1024), 'MB');
+
+    if (stats.size < 50 * 1024 * 1024) {
+      console.error('[Rollback] Файл backup повреждён (слишком маленький)');
+      return { ok: false, reason: 'Файл backup повреждён' };
+    }
+
+    // Запускаем установщик предыдущей версии с тихой установкой
+    const { spawn } = require('child_process');
+    console.log('[Rollback] Запуск установщика...');
+
+    spawn(backupPath, ['/S'], {
+      detached: true,
+      stdio: 'ignore'
+    }).unref();
+
+    // Закрываем приложение, чтобы установщик мог обновить файлы
+    console.log('[Rollback] Закрытие приложения для установки');
+    setImmediate(() => app.quit());
+
+    return { ok: true, version: backup.version };
+  } catch (error) {
+    console.error('[Rollback] Ошибка отката:', error);
+    return { ok: false, reason: error.message };
+  }
+}
+
+/**
+ * Возвращает информацию о доступных backup'ах для UI.
+ */
+function getBackupInfo() {
+  const history = readVersionHistory();
+  return {
+    current: history.current,
+    previous: history.previous,
+    hasBackup: history.backups.length > 0 && history.previous !== null
+  };
+}
+
+// ================================================================
 
 // Из тела релиза GitHub делаем короткий текст: разметка на кассе не нужна
 function plainNotes(notes) {
@@ -160,6 +323,9 @@ async function checkForUpdates() {
 async function downloadUpdate() {
   if (isDev) return status;
   try {
+    // Создаём backup перед загрузкой обновления
+    await createBackup();
+
     setStatus({ state: 'downloading', percent: 0, error: null });
     await initAutoUpdater().downloadUpdate();
   } catch (error) {
@@ -175,6 +341,16 @@ async function downloadUpdate() {
  */
 function installUpdate() {
   if (isDev || status.state !== 'downloaded') return { ok: false };
+
+  // Обновляем метаданные перед установкой новой версии
+  try {
+    const history = readVersionHistory();
+    history.current = status.version || app.getVersion();
+    writeVersionHistory(history);
+  } catch (error) {
+    console.error('Ошибка обновления метаданных:', error);
+  }
+
   // isSilent = true: установщик у нас с диалогами (кассир при первой
   // установке выбирает папку), но при обновлении эти диалоги пришлось бы
   // прокликивать на планшете — ставим тихо, в ту же папку.
@@ -189,6 +365,8 @@ function setupUpdater() {
   ipcMain.handle('updater-check', async () => checkForUpdates());
   ipcMain.handle('updater-download', async () => downloadUpdate());
   ipcMain.handle('updater-install', async () => installUpdate());
+  ipcMain.handle('updater-get-backup-info', async () => getBackupInfo());
+  ipcMain.handle('updater-rollback', async () => rollbackToPrevious());
 
   if (isDev) return;
 
