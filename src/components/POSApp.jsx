@@ -335,7 +335,8 @@ const POSApp = () => {
           ml: item.ml,
           g: item.g,
           price: item.price,
-          quantity: item.quantity
+          quantity: item.quantity,
+          discount: item.discount || 0  // Добавляем информацию о скидке
         }))
       };
       window.electron.ipcRenderer.send('save-sale', sale);

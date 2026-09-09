@@ -686,7 +686,14 @@ async function printReceipt(printerConfig, items, orderNumber, date) {
       const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
       const size = itemSizeLabel(item);
       const name = item.name || 'Товар';
-      const label = size ? `${name} ${size}` : name;
+      const discount = parseFloat(item.discount) || 0;
+      
+      // Формируем метку с учетом скидки
+      let label = size ? `${name} ${size}` : name;
+      if (discount > 0) {
+        label += ` -${discount}%`;  // Скидка в процентах
+      }
+      
       for (let i = 0; i < qty; i++) {
         printer.println(label);
         totalUnits += 1;
