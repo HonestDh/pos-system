@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { fmtPrice } from '../utils/format';
 import { VOLUME_OPTIONS, UNIT_VOLUME, UNIT_WEIGHT, getVariants } from '../utils/product';
+import DiscountEditor from './DiscountEditor';
 
 const num = (value) => parseFloat(String(value ?? '').replace(',', '.'));
 
-const AdminPanel = ({ products, categories, onAddProduct, onDeleteProduct, onUpdateProduct, onAddCategory, onDeleteCategory, allFolders }) => {
+const AdminPanel = ({ products, categories, onAddProduct, onDeleteProduct, onUpdateProduct, onAddCategory, onDeleteCategory, allFolders, discounts, onUpdateDiscounts }) => {
   const [activeTab, setActiveTab] = useState('products');
   const [newProduct, setNewProduct] = useState({ name: '', image: '📦', selectedFolder: 'root' });
   // Тип товара: напитки продаются по объёму, десерты — по массе
@@ -187,6 +188,16 @@ const AdminPanel = ({ products, categories, onAddProduct, onDeleteProduct, onUpd
             }`}
           >
             🗂️ Категории
+          </button>
+          <button
+            onClick={() => setActiveTab('discounts')}
+            className={`px-7 py-3 rounded-xl font-bold text-base transition-colors min-h-[48px] ${
+              activeTab === 'discounts'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-white text-gray-900 hover:bg-gray-100 shadow-sm'
+            }`}
+          >
+            💰 Скидки
           </button>
         </div>
 
@@ -528,6 +539,22 @@ const AdminPanel = ({ products, categories, onAddProduct, onDeleteProduct, onUpd
                   <p className="text-gray-400 text-base">Нет категорий</p>
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'discounts' && (
+          <div className="max-w-2xl">
+            <div className="bg-white rounded-2xl shadow-sm p-5">
+              <h2 className="text-lg font-bold mb-4">Настройка скидок</h2>
+              <p className="text-sm text-gray-600 mb-4">
+                Укажите доступные скидки для контекстного меню (долгое нажатие на товар в корзине)
+              </p>
+
+              <DiscountEditor
+                discounts={discounts}
+                onUpdate={onUpdateDiscounts}
+              />
             </div>
           </div>
         )}

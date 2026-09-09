@@ -98,6 +98,8 @@ const POSApp = () => {
   const [saveError, setSaveError] = useState(null);
   // Есть ли готовое обновление — для метки в меню «Опции»
   const [updateReady, setUpdateReady] = useState(false);
+  // Доступные скидки для контекстного меню
+  const [discounts, setDiscounts] = useState([20, 50, 100]);
 
   // ----- Загрузка из Electron -----
   useEffect(() => {
@@ -127,6 +129,7 @@ const POSApp = () => {
       const cfg = (data && data.config) || {};
       if (Array.isArray(cfg.products) && cfg.products.length > 0) setProducts(cfg.products);
       if (Array.isArray(cfg.categories) && cfg.categories.length > 0) setCategories(cfg.categories);
+      if (Array.isArray(cfg.discounts) && cfg.discounts.length > 0) setDiscounts(cfg.discounts);
       if (data && data.stats) setStats(data.stats);
       if (data && data.printerConfig) setPrinterConfig(data.printerConfig);
       setIsConfigLoaded(true);
@@ -139,8 +142,8 @@ const POSApp = () => {
   // ----- Сохранение в Electron -----
   useEffect(() => {
     if (!isConfigLoaded || !window.electron) return;
-    window.electron.ipcRenderer.send('save-config', { products, categories });
-  }, [products, categories]);
+    window.electron.ipcRenderer.send('save-config', { products, categories, discounts });
+  }, [products, categories, discounts, isConfigLoaded]);
 
   // ----- Настройки / выход -----
   const closeAllPanels = () => {
@@ -298,7 +301,21 @@ const POSApp = () => {
     }));
   };
 
-  const cartTotal = roundPrice(cart.reduce((sum, item) => sum + item.price * item.quantity, 0));
+  const applyDiscount = (key, discount) => {
+    setCart(prev => prev.map(item => {
+      if (item.lineId === key) {
+        return { ...item, discount: discount };
+      }
+      return item;
+    }));
+  };
+
+  const cartTotal = roundPrice(cart.reduce((sum, item) => {
+    const finalPrice = item.discount > 0
+      ? item.price * (1 - item.discount / 100)
+      : item.price;
+    return sum + finalPrice * item.quantity;
+  }, 0));
   const change = roundPrice(Math.max(0, parseFloat(amountReceived || 0) - cartTotal));
 
   // ----- Оплата -----
@@ -376,6 +393,10 @@ const POSApp = () => {
       const cats = Array.isArray(p.categories) ? p.categories : [];
       return !cats.includes(category.name);
     }));
+  };
+
+  const handleUpdateDiscounts = (newDiscounts) => {
+    setDiscounts(newDiscounts);
   };
 
   // ----- Навигация -----
@@ -459,7 +480,9 @@ const POSApp = () => {
           cart={cart}
           removeFromCart={removeFromCart}
           updateQuantity={updateQuantity}
+          applyDiscount={applyDiscount}
           cartTotal={cartTotal}
+          discounts={discounts}
         />
       </div>
 
@@ -496,6 +519,8 @@ const POSApp = () => {
           onAddCategory={handleAddCategory}
           onDeleteCategory={handleDeleteCategory}
           allFolders={allFolders}
+          discounts={discounts}
+          onUpdateDiscounts={handleUpdateDiscounts}
         />
       ) : showStats ? (
         <StatsPanel stats={stats} />
